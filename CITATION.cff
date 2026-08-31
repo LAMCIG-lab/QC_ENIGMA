@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: enigma-shape-qc
+message: If you use this software, please cite it.
+type: software
+authors:
+  - family-names: Maruyama
+    given-names: Y.
+    affiliation: Illinois Institute of Technology
+  - name: LAMCIG lab
+    affiliation: Illinois Institute of Technology
+repository-code: https://github.com/LAMCIG-lab/enigma-shape-qc
+license: MIT
+version: 0.1.0
+abstract: >
+  Quality control for ENIGMA subcortical shape features using per-vertex
+  thickness, log-Jacobian, and mean curvature with a Kernel PCA–logistic
+  model (L3 recall-floor operating point).

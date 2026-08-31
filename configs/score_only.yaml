@@ -1,0 +1,12 @@
+# Technician path: apply a saved model to a Shape tree.
+# Does not need QA labels. Requires curvature_*.raw unless features is overridden.
+
+features: [thick, logjac, curv]
+require_features: [thick, logjac, curv]
+shape_root: null
+models_dir: null
+seed: 42
+threshold:
+  policy: recall_floor
+  target: 0.8
+output_dir: outputs/score_runs

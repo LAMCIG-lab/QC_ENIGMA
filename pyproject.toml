@@ -1,0 +1,38 @@
+[project]
+name = "shapeqc"
+version = "0.1.0"
+description = "ENIGMA subcortical shape QC (thickness, log-Jacobian, curvature)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+authors = [{ name = "LAMCIG lab" }]
+dependencies = [
+  "numpy>=1.20",
+  "pandas>=1.3",
+  "scikit-learn>=1.0",
+  "joblib>=1.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+train = ["imbalanced-learn"]
+
+[project.scripts]
+qc-prep = "shapeqc.cli:prep"
+qc-prep-curvature = "shapeqc.cli:prep_curvature"
+qc-train = "shapeqc.cli:train"
+qc-score = "shapeqc.cli:score"
+qc-report = "shapeqc.cli:report"
+
+[project.urls]
+Homepage = "https://github.com/LAMCIG-lab/enigma-shape-qc"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

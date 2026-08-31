@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+src/*.egg-info/
+.venv/
+venv/
+outputs/
+*.joblib
+*.o*
+*.e*
+*.log
+.DS_Store
+*.raw.mean_raw.tmp
+# never commit imaging or labels from ENIGMA/ADNI
+*.nii
+*.nii.gz
+*.mgz
+human_labels/
+data/

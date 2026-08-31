@@ -1,0 +1,27 @@
+{
+  "source_run": "curv_full_recall80",
+  "features": ["thick", "logjac", "curv"],
+  "threshold_policy": "recall_floor",
+  "threshold_target": 0.8,
+  "n_rois": 21,
+  "n_seeds": 5,
+  "macro": {
+    "F_recall": 0.798,
+    "F_share": 0.318,
+    "precision": 0.062,
+    "F_score_mod": 0.725,
+    "auc": 0.845,
+    "ap": 0.265
+  },
+  "ablation_thick_logjac_l3": {
+    "source_run": "24239_complete_retune_r08",
+    "F_recall": 0.777,
+    "F_share": 0.326,
+    "precision": 0.071,
+    "auc": 0.826,
+    "ap": 0.25
+  },
+  "status": "provisional_zero_fill",
+  "coverage_note": "69913/75737 labeled ROI-rows (92.3%) have curvature_*.raw. FBIRN and UCIS (416 subjects) have thick+logjac only. Camera-ready Table 1 will retrain with require_features thick,logjac,curv (drop those rows).",
+  "retrain_config": "QC_ML_submit/configs/paper_l3_thick_logjac_curv.yaml"
+}
