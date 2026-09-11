@@ -1,20 +1,14 @@
 # Technician path
 
-1. Finish ENIGMA-Shape so each subject folder has `resliced_mesh_*.m`, `thick_*.raw`, `LogJacs_*.raw`.
-2. Generate curvature (`ccbbm` from ENIGMA-Shape `MedialDemonsShared/bin`):
+```bash
+cp local_paths.example.py local_paths.py
+# edit SHAPE_ROOT, OUT_DIR, MODEL_3CH, MODEL_2CH
+chmod 600 local_paths.py
+qc-report
+```
 
-   ```bash
-   export CCBBM=/path/to/MedialDemonsShared/bin/ccbbm
-   qc-prep-curvature --shape-root /path/to/Shape_output
-   ```
+Writes `qc_report.md` and `predictions.csv`. `flag==1` is a **checking** list of files to open, not a fail label.
 
-3. Inventory, then score if you have a model file:
+QA CSVs are ignored. Scarce-label ROIs (not `paper_deployable`) are weaker references — raise `TAU` (e.g. `{11: 0.6}`) if caudate floods the queue.
 
-   ```bash
-   qc-score --shape-root /path/to/Shape_output --out-dir ./outputs/score
-   qc-score --shape-root /path/to/Shape_output --out-dir ./outputs/score --model /path/to/model.joblib
-   ```
-
-4. Give raters `review_list.csv` (`flag=1`). Weak ROIs (thalamus, amygdala, putamen) flag a large share of scans at the L3 recall floor.
-
-If a site has no meshes, use `--features thick,logjac` or re-run Shape. Do not zero-fill curvature.
+`CCBBM` must be an absolute path. The 3-channel model is `curv_full_recall80` (FBIRN/UCIS no-mesh rows were zero-filled in training; those meshes are not reconstructed). New folders with no mesh and no curvature use 2-channel `24239`. GitHub CI does not load the frozen KPCA weights.

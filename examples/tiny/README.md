@@ -1,14 +1,14 @@
-# Tiny synthetic Shape tree (ROI 17 only, 32 vertices)
+# Tiny synthetic Shape tree (ROI 13 and 17, 32 vertices)
 
-Not real ENIGMA or ADNI data. Used for install checks and CI.
+Not real ENIGMA or ADNI data. Used for install checks and CI. No QA labels.
 
 ```
 examples/tiny/
-  labels.csv                 # subjA pass (0), subjB fail (1)
   subjA/thick_17.raw
   subjA/LogJacs_17.raw
   subjA/curvature_17.raw
+  subjA/... same for ROI 13
   subjB/...
 ```
 
-No meshes: `qc-prep-curvature` will report `no_mesh`. Scoring uses the three `.raw` files already here.
+No meshes: missing curvature would fall back to 2-channel. These folders already have `.raw` files.

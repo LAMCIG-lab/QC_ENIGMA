@@ -13,3 +13,4 @@ jobs:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
       - run: pytest -q
+        # 32-vertex dummy logistics only; does not load frozen KPCA joblibs.

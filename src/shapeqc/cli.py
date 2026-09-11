@@ -1,16 +1,19 @@
-"""Command-line entry points: qc-prep, qc-prep-curvature, qc-train, qc-score, qc-report."""
+"""Public command is qc-report only (installed).
+
+prep / train / score remain in this module for lab experiments but are
+not console_scripts and are not called by qc-report.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import pandas as pd
 
 from shapeqc.io import DEFAULT_ROIS, inventory_row, iter_subjects
-from shapeqc.metrics import paper_counts
+from shapeqc.settings import load_local_settings
 
 
 def _parse_features(text: str) -> list[str]:
@@ -28,17 +31,15 @@ def prep(argv: list[str] | None = None) -> None:
     p.add_argument("--shape-root", required=True)
     p.add_argument("--out", required=True, help="Output CSV path")
     p.add_argument("--rois", default="")
-    p.add_argument("--labels", default="", help="Optional labels CSV with subject_id,roi,y_fail")
     args = p.parse_args(argv)
     rois = _parse_rois(args.rois)
     rows = []
     for subj in iter_subjects(args.shape_root):
         for roi in rois:
-            rows.append(inventory_row(subj, roi))
+            rec = inventory_row(subj, roi)
+            if rec["thick"] and rec["logjac"]:
+                rows.append(rec)
     df = pd.DataFrame(rows)
-    if args.labels:
-        lab = pd.read_csv(args.labels)
-        df = df.merge(lab, on=["subject_id", "roi"], how="left")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
@@ -66,7 +67,10 @@ def prep_curvature(argv: list[str] | None = None) -> None:
 
 
 def train(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="qc-train", description="Fit a simple scaler+logistic (CI / tiny example).")
+    p = argparse.ArgumentParser(
+        prog="qc-train",
+        description="Fit scaler+logistic on thick+logjac+curv (sklearn only; no imbalanced-learn).",
+    )
     p.add_argument("--manifest", required=True, help="CSV from qc-prep with subject_dir, roi, y_fail")
     p.add_argument("--out-dir", required=True)
     p.add_argument("--features", default="thick,logjac,curv")
@@ -87,8 +91,6 @@ def train(argv: list[str] | None = None) -> None:
     save_model(pipe, tau, model_path)
     preds = score_rows(pipe, man, features, require, tau)
     preds.to_csv(out / "predictions.csv", index=False)
-    review = preds.loc[preds["flag"] == 1].copy()
-    review.to_csv(out / "review_list.csv", index=False)
     paper = preds.attrs.get("paper", {})
     (out / "paper_metrics.json").write_text(json.dumps(paper, indent=2) + "\n")
     print("tau={0:.4f} F_recall={1:.3f} F_share={2:.3f}".format(
@@ -107,13 +109,18 @@ def score(argv: list[str] | None = None) -> None:
     p.add_argument("--model", default="", help="joblib from qc-train (optional)")
     args = p.parse_args(argv)
     rois = _parse_rois(args.rois)
-    rows = [inventory_row(s, r) for s in iter_subjects(args.shape_root) for r in rois]
+    rows = []
+    for s in iter_subjects(args.shape_root):
+        for r in rois:
+            rec = inventory_row(s, r)
+            if rec["thick"] and rec["logjac"]:
+                rows.append(rec)
     inv = pd.DataFrame(rows)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     inv.to_csv(out / "inventory.csv", index=False)
     if not args.model:
-        missing = (~inv["curv"]).sum()
+        missing = (~inv["curv"]).sum() if len(inv) else 0
         print("wrote inventory ({0} rows, {1} missing curvature)".format(len(inv), int(missing)))
         print("pass --model to write P_fail / flag")
         return
@@ -135,23 +142,72 @@ def score(argv: list[str] | None = None) -> None:
         scored.append({**row, "P_fail": pfail, "tau": tau, "flag": int(pfail >= tau), "error": ""})
     pred = pd.DataFrame(scored)
     pred.to_csv(out / "predictions.csv", index=False)
-    pred.loc[pred["flag"] == 1].to_csv(out / "review_list.csv", index=False)
     print("wrote {0}".format(out))
 
 
 def report(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="qc-report", description="Paper metrics from a predictions CSV.")
-    p.add_argument("--predictions", required=True)
-    p.add_argument("--out", default="")
+    local = load_local_settings()
+    p = argparse.ArgumentParser(
+        prog="qc-report",
+        description="Shape .raw files → qc_report.md + predictions.csv. Defaults come from local_paths.py.",
+    )
+    p.add_argument("--shape-root", default="", help=argparse.SUPPRESS)
+    p.add_argument("--out-dir", default="", help=argparse.SUPPRESS)
+    p.add_argument("--rois", default="", help=argparse.SUPPRESS)
+    p.add_argument("--max-subjects", type=int, default=0, help=argparse.SUPPRESS)
+    p.add_argument("--seed", type=int, default=42, help=argparse.SUPPRESS)
+    p.add_argument("--models-3ch", default="", help=argparse.SUPPRESS)
+    p.add_argument("--models-2ch", default="", help=argparse.SUPPRESS)
+    p.add_argument("--thresholds", default="", help=argparse.SUPPRESS)
+    p.add_argument("--skip-joblib-verify", action="store_true", help=argparse.SUPPRESS)
     args = p.parse_args(argv)
-    df = pd.read_csv(args.predictions)
-    if "y_fail" not in df.columns:
-        raise SystemExit("predictions CSV needs y_fail to compute paper metrics")
-    tau = float(df["tau"].iloc[0]) if "tau" in df.columns else 0.5
-    m = paper_counts(df["y_fail"].to_numpy(), df["P_fail"].to_numpy(), threshold=tau)
-    text = json.dumps(m, indent=2)
-    print(text)
-    if args.out:
-        Path(args.out).write_text(text + "\n")
 
+    shape_root = args.shape_root or local.shape_root
+    out_dir = args.out_dir or local.out_dir
+    if not shape_root or shape_root == "/path/to/Shape_output":
+        raise SystemExit(
+            "qc-report: copy local_paths.example.py to local_paths.py and set SHAPE_ROOT "
+            "(and OUT_DIR). Do not put cluster paths in committed files."
+        )
+    if not out_dir:
+        raise SystemExit("qc-report: set OUT_DIR in local_paths.py")
 
+    if args.rois:
+        rois = _parse_rois(args.rois)
+    elif local.rois:
+        rois = [int(x) for x in local.rois]
+    else:
+        rois = None
+
+    max_subjects = args.max_subjects or local.max_subjects or None
+    models_3ch = args.models_3ch or local.model_3ch or None
+    models_2ch = args.models_2ch or local.model_2ch or None
+
+    from shapeqc.score import run_score
+
+    payload = run_score(
+        shape_root,
+        rois=rois,
+        out_dir=out_dir,
+        seed=args.seed,
+        models_3ch=models_3ch,
+        models_2ch=models_2ch,
+        thresholds=args.thresholds or None,
+        tau_override=local.tau,
+        max_subjects=max_subjects,
+        verify_checksums=not args.skip_joblib_verify,
+    )
+    m = payload["macro"]
+    out_json = {
+        "mode": "score",
+        "n_rows": m["n_rows"],
+        "n_flagged": m["n_flagged"],
+        "flagged_frac": round(m["flagged_frac"], 3) if m["n_rows"] else 0.0,
+        "n_3ch": m["n_3ch"],
+        "n_2ch": m["n_2ch"],
+        "out_dir": str(out_dir),
+    }
+    print(json.dumps(out_json, indent=2))
+    print("wrote {0}/qc_report.md and predictions.csv".format(out_dir))
+    if m["n_flagged"]:
+        print("{0} flagged rows — see the Review list for the .raw files to open".format(m["n_flagged"]))

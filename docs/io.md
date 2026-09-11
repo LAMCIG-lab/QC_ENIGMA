@@ -2,34 +2,28 @@
 
 ## Per-subject Shape directory (input)
 
+`qc-report` accepts a site folder of subject directories, or one subject folder.
+
 ```
 <subject>/
   resliced_mesh_17.m
   thick_17.raw
   LogJacs_17.raw
-  curvature_17.raw      # generated; required for default model
+  curvature_17.raw      # generated from mesh when missing; optional (2ch fallback)
   curve_17.ucf          # unused
 ```
 
 Vertex `i` is the same atlas location in all three `.raw` files.
 
-## Train outputs (`qc-train`)
+If curvature and mesh are both missing, `qc-report` scores that row with the frozen 24239 thick+logjac model instead of dropping it.
 
-| File | Public? | Contents |
-|------|---------|----------|
-| `models/*.joblib` | internal | Fitted pipeline per ROI × seed |
-| `results_long.csv` | internal | Per job metrics |
-| `results_agg.csv` | paper | Seed-mean metrics |
-| `deployment.csv` | paper | Weak-ROI verdict |
-| `paper_metrics.json` | paper | Macro F-recall, F-share, AUC |
-| `preds_*.csv` | restricted | Subject-level scores |
+Unknown sibling directories (no `thick_*.raw`) abort the run.
 
-## Score outputs (`qc-score`)
+## `qc-report` outputs
 
-| File | Public? | Contents |
-|------|---------|----------|
-| `review_list.csv` | restricted | Subject, ROI, P_fail, flag |
-| `summary_by_roi.csv` | paper | Flagged % only, no IDs |
+| File | Contents |
+|------|----------|
+| `qc_report.md` | Checking-strategy banners, per-ROI table (includes `paper_deployable`), review list of flagged files |
+| `predictions.csv` | subject_id, ROI, P_fail, tau, flag, paper_deployable, n_fail_paper, files (no absolute subject_dir) |
 
-`flag` means `P_fail >= tau` with `tau` from validation at recall floor 0.8.
-That is a review queue, not an automatic ground-truth label.
+`flag` means `P_fail >= tau`. That is a list of files to check, not a ground-truth fail. Raise `TAU` in `local_paths.py` to shrink a scarce-ROI queue.

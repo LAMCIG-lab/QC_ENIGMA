@@ -15,17 +15,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
-train = ["imbalanced-learn"]
 
 [project.scripts]
-qc-prep = "shapeqc.cli:prep"
-qc-prep-curvature = "shapeqc.cli:prep_curvature"
-qc-train = "shapeqc.cli:train"
-qc-score = "shapeqc.cli:score"
 qc-report = "shapeqc.cli:report"
 
 [project.urls]
-Homepage = "https://github.com/LAMCIG-lab/enigma-shape-qc"
+Homepage = "https://github.com/LAMCIG-lab/QC_ENIGMA"
 
 [build-system]
 requires = ["setuptools>=61"]

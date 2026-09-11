@@ -1,14 +1,12 @@
 """Generate curvature_<roi>.raw from resliced_mesh_<roi>.m via CCBBM.
 
 Not part of stock ENIGMA-Shape. Requires the `ccbbm` binary from
-ENIGMA-Shape MedialDemonsShared/bin. Set CCBBM=/path/to/ccbbm if it is not
-on PATH.
+ENIGMA-Shape MedialDemonsShared/bin. Set CCBBM to an absolute path.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -21,18 +19,17 @@ SMOOTH_STEPS = 20
 
 def find_ccbbm() -> Path:
     env = os.environ.get("CCBBM", "").strip()
-    if env:
-        p = Path(env)
-        if p.is_file():
-            return p
-        raise FileNotFoundError("CCBBM is set but not a file: {0}".format(env))
-    which = shutil.which("ccbbm")
-    if which:
-        return Path(which)
-    raise FileNotFoundError(
-        "ccbbm not found. Install ENIGMA-Shape and set CCBBM to "
-        "MedialDemonsShared/bin/ccbbm"
-    )
+    if not env:
+        raise FileNotFoundError(
+            "ccbbm not found. Set CCBBM to an absolute path to "
+            "MedialDemonsShared/bin/ccbbm (do not rely on PATH)."
+        )
+    p = Path(env)
+    if not p.is_absolute():
+        raise FileNotFoundError("CCBBM must be an absolute path, got {0!r}".format(env))
+    if p.is_file():
+        return p
+    raise FileNotFoundError("CCBBM is set but not a file: {0}".format(env))
 
 
 def generate_one(mesh: Path, out_curv: Path, *, ccbbm: Path | None = None, steps: int = SMOOTH_STEPS) -> Path:

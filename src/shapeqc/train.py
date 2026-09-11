@@ -1,8 +1,8 @@
-"""Minimal train path for examples and CI.
+"""Internal simple logistic (not installed as qc-train).
 
-The paper model is KernelPCA + logistic (see configs/paper_l3_thick_logjac_curv.yaml).
-This module fits a StandardScaler + logistic on concatenated vertex channels so
-the CLI and tests run without the cluster training script.
+Paper model is KernelPCA + logistic on the cluster. This module is
+StandardScaler + logistic on concatenated vertex channels so CI can run
+without joblibs or imbalanced-learn.
 """
 
 from __future__ import annotations

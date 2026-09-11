@@ -1,99 +1,64 @@
 # enigma-shape-qc
 
-Quality control for **ENIGMA subcortical shape** features (LAMCIG lab).
+Checking strategy for ENIGMA subcortical shape files (which subject × ROI to look at). **Not** an automatic fail detector and **not** a medical device.
 
-Intended GitHub home: [LAMCIG-lab/enigma-shape-qc](https://github.com/LAMCIG-lab/enigma-shape-qc).  
-This folder is the software drop (`QC_ML_submit/`). Cluster data stays out of git.
+```bash
+cp local_paths.example.py local_paths.py   # then edit SHAPE_ROOT, OUT_DIR, MODEL_3CH, MODEL_2CH
+chmod 600 local_paths.py
+qc-report
+```
 
-Default model channels: **thickness + log-Jacobian + mean curvature**.  
-Stock ENIGMA-Shape does not write curvature; this package generates `curvature_<roi>.raw` from `resliced_mesh_<roi>.m`.
+`local_paths.py` is gitignored. Do not put cluster paths in committed source.
+
+Default model: **thick + logjac + curv**. If `curvature_<roi>.raw` is missing but `resliced_mesh_<roi>.m` exists, curvature is generated (`CCBBM` must be an absolute path). If both are missing, that row uses the frozen 2-channel model. Tau is the training validation operating point unless you set `TAU` (example: `TAU = {11: 0.6}`).
+
+Human QA CSVs are not read.
+
+## What `qc-report` loads
+
+The 3-channel model is **`curv_full_recall80`** (PBS 24264). Two sites (FBIRN and UCIS, 416 subjects) had no meshes; curvature was zero-filled **in that training run**. Those meshes are not reconstructed. That is the intended technician reference.
+
+| Channel set | Run id | When it is used |
+|-------------|--------|-----------------|
+| thick+logjac+curv | `curv_full_recall80` (PBS 24264) | Default, when `curvature_*.raw` exists (or was generated from mesh) |
+| thick+logjac | `24239` (retune `24239_complete_retune_r08`) | New folders with **no mesh and no curvature** (2-channel; not zero-fill) |
+
+`paper/` numbers are from these same runs. `configs/joblib_sha256.csv` lists SHA256 of the seed-42 joblibs. `qc-report` checks that hash before `joblib.load` (pickle). Weights stay **out of git**; GitHub CI does **not** reproduce frozen `P_fail` (it only fits 32-vertex dummy logistics on `examples/tiny`).
+
+Only ROI **13, 17, 53** met paper deployability floors. Other ROIs are still scored (`paper_deployable=no` in the report). Treat those flags as a weaker reference — e.g. ROI 11 had 9 fail labels in ~5409 rows.
+
+## Outputs
+
+| File | Meaning |
+|------|---------|
+| `qc_report.md` | Checking list of flagged **files**, with deployability banners |
+| `predictions.csv` | Every scored row (`P_fail`, `tau`, `flag`, `paper_deployable`, `files`). No absolute `subject_dir`. `flag==1` is who to look at |
+
+## Folder map
+
+| Path | What |
+|------|------|
+| `src/shapeqc/` | Library. Only `qc-report` is installed as a command |
+| `local_paths.example.py` | Template for the gitignored `local_paths.py` |
+| `configs/` | Paper taus, joblib SHA256, training YAML |
+| `paper/` | Frozen Table 1 numbers |
+| `examples/tiny/` | Fake 32-vertex tree for CI (no labels) |
+| `tests/` | pytest |
+| `docs/` | Extra notes |
+| `extras/` | Not this CLI |
+
+Training code (`src/shapeqc/train.py`) stays in the package for us. It is **not** a `qc-train` command. Paper KPCA training is cluster-only (`QC_ML/scripts/logistic/`).
 
 ## Install
 
 ```bash
-git clone https://github.com/LAMCIG-lab/enigma-shape-qc
-cd enigma-shape-qc
+cd /path/to/QC_ENIGMA
 pip install -e ".[dev]"
+export CCBBM=/absolute/path/to/ccbbm
 ```
 
-`qc-prep-curvature` needs the ENIGMA-Shape `ccbbm` binary (`export CCBBM=/path/to/ccbbm`).
+Set `MODEL_3CH` / `MODEL_2CH` in `local_paths.py`. Those directories must hold the trusted paper `.joblib` files. Do not commit them.
 
-## Score a Shape tree (technicians)
+## Allowed inputs
 
-Each subject directory must already contain `resliced_mesh_<roi>.m`, `thick_<roi>.raw`, and `LogJacs_<roi>.raw`.
-
-```bash
-qc-prep-curvature --shape-root /path/to/Shape_output
-qc-score --shape-root /path/to/Shape_output --out-dir ./outputs/score --model /path/to/model_simple.joblib
-```
-
-Outputs: `inventory.csv`, and if `--model` is set, `predictions.csv` and `review_list.csv` (`P_fail`, `tau`, `flag`).  
-`flag=1` means send to a human. This repo does **not** include trained `.joblib` weights.
-
-Without a model, `qc-score` only writes the inventory (which files exist).
-
-Sites with no meshes: `--features thick,logjac` or re-run ENIGMA-Shape. Do not zero-fill curvature.
-
-## Tiny example (no ENIGMA data)
-
-```bash
-qc-prep --shape-root examples/tiny --rois 17 --labels examples/tiny/labels.csv --out /tmp/tiny_manifest.csv
-qc-train --manifest /tmp/tiny_manifest.csv --out-dir /tmp/tiny_run --features thick,logjac,curv
-qc-score --shape-root examples/tiny --rois 17 --model /tmp/tiny_run/model_simple.joblib --out-dir /tmp/tiny_score
-qc-report --predictions /tmp/tiny_run/predictions.csv
-```
-
-`qc-train` here is a **scaler + logistic** so CI can run. The paper model is Kernel PCA + logistic (`configs/paper_l3_thick_logjac_curv.yaml`).
-
-## Input → output
-
-```mermaid
-flowchart LR
-  Mesh[resliced_mesh_ROI.m]
-  Thick[thick_ROI.raw]
-  Logjac[LogJacs_ROI.raw]
-  CurvGen[qc-prep-curvature]
-  Curv[curvature_ROI.raw]
-  Score[qc-score]
-  Review[review_list.csv]
-  Mesh --> CurvGen --> Curv
-  Thick --> Score
-  Logjac --> Score
-  Curv --> Score
-  Score --> Review
-```
-
-`curve_<roi>.ucf` is the medial curve. It is not used.
-
-## Paper numbers (provisional)
-
-Source run id: `curv_full_recall80` (21 ROIs × 5 seeds, recall floor 0.8).  
-Macros below **zero-filled** curvature for 416 FBIRN/UCIS subjects. Camera-ready Table 1 is a retrain with `require_features: [thick, logjac, curv]`.
-
-| Metric | thick+logjac+curv | ablation thick+logjac |
-|--------|-------------------|------------------------|
-| Fail recall | 0.798 | 0.777 |
-| Flagged share | 0.318 | 0.326 |
-| AUC | 0.845 | 0.826 |
-
-See `paper/` and `configs/`.
-
-## Repository layout
-
-```
-README.md
-LICENSE
-CITATION.cff
-pyproject.toml
-configs/          paper, ablation, score-only
-docs/             technician + I/O
-paper/            tables only (no models)
-src/shapeqc/      library + CLI
-examples/tiny/    2 synthetic subjects, ROI 17
-tests/
-extras/           GNN / intensity / unsupervised — not default
-```
-
-## Out of scope
-
-FreeSurfer and ENIGMA-Shape Medial Demons. This package starts at a Shape subject folder.
+Either a site of subject folders or one subject folder of `thick_*.raw` + `LogJacs_*.raw`. Directories without `thick_*.raw` are **rejected**.

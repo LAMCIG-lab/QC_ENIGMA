@@ -32,6 +32,16 @@ def subject_feature_paths(subject_dir: str | Path, roi: int) -> dict[str, Path]:
     }
 
 
+def is_subject_dir(path: str | Path) -> bool:
+    """True if this folder contains at least one thick_*.raw."""
+    p = Path(path)
+    return p.is_dir() and any(p.glob("thick_*.raw"))
+
+
+def _child_dirs(root: Path) -> list[Path]:
+    return sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+
+
 def load_channels(
     subject_dir: str | Path,
     roi: int,
@@ -66,23 +76,72 @@ def load_channels(
     return np.concatenate(arrays, axis=0).astype(np.float32, copy=False)
 
 
-def iter_subjects(shape_root: str | Path) -> Iterable[Path]:
+def iter_subjects(shape_root: str | Path, *, max_subjects: int | None = None) -> Iterable[Path]:
+    """Yield subject folders that contain at least one thick_*.raw.
+
+    Accepts either a site root (subject subfolders) or a single subject folder.
+    Directories without thick_*.raw are rejected, not skipped.
+    Loose files at the site root (README, leftover CSVs) are ignored.
+    """
     root = Path(shape_root)
     if not root.is_dir():
         raise FileNotFoundError(root)
-    for child in sorted(root.iterdir()):
-        if child.is_dir() and not child.name.startswith("."):
-            yield child
+
+    if is_subject_dir(root):
+        unknown = [p.name for p in _child_dirs(root)]
+        if unknown:
+            raise SystemExit(
+                "Unknown directories inside subject folder {0}: {1}".format(
+                    root, ", ".join(unknown)
+                )
+            )
+        yield root
+        return
+
+    found: list[Path] = []
+    unknown: list[str] = []
+    for child in _child_dirs(root):
+        if is_subject_dir(child):
+            found.append(child)
+        else:
+            unknown.append(child.name)
+    if unknown:
+        raise SystemExit(
+            "Unknown directories under {0} (no thick_*.raw): {1}".format(
+                root, ", ".join(unknown)
+            )
+        )
+    if not found:
+        raise SystemExit(
+            "no subject folders with thick_*.raw under {0}".format(root)
+        )
+    n = 0
+    for child in found:
+        yield child
+        n += 1
+        if max_subjects is not None and n >= int(max_subjects):
+            return
 
 
 def inventory_row(subject_dir: Path, roi: int) -> dict:
     paths = subject_feature_paths(subject_dir, roi)
+    sid = subject_dir.name
+
+    def _rel(path: Path) -> str:
+        if not path.is_file():
+            return ""
+        return "{0}/{1}".format(sid, path.name)
+
     return {
-        "subject_id": subject_dir.name,
+        "subject_id": sid,
         "roi": int(roi),
         "thick": paths["thick"].is_file(),
         "logjac": paths["logjac"].is_file(),
         "curv": paths["curv"].is_file(),
         "mesh": paths["mesh"].is_file(),
         "subject_dir": str(subject_dir.resolve()),
+        "thick_file": _rel(paths["thick"]),
+        "logjac_file": _rel(paths["logjac"]),
+        "curv_file": _rel(paths["curv"]),
+        "mesh_file": _rel(paths["mesh"]),
     }

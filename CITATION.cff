@@ -8,10 +8,12 @@ authors:
     affiliation: Illinois Institute of Technology
   - name: LAMCIG lab
     affiliation: Illinois Institute of Technology
-repository-code: https://github.com/LAMCIG-lab/enigma-shape-qc
+repository-code: https://github.com/LAMCIG-lab/QC_ENIGMA
 license: MIT
 version: 0.1.0
 abstract: >
-  Quality control for ENIGMA subcortical shape features using per-vertex
-  thickness, log-Jacobian, and mean curvature with a Kernel PCA–logistic
-  model (L3 recall-floor operating point).
+  Research checking strategy for ENIGMA subcortical shape features using
+  per-vertex thickness, log-Jacobian, and mean curvature with a Kernel
+  PCA–logistic model (L3 recall-floor operating point). Intended as a
+  technician review queue, not an automatic fail detector and not a
+  medical device.
