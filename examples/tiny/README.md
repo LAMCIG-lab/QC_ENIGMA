@@ -1,6 +1,7 @@
 # Tiny synthetic Shape tree (ROI 13 and 17, 32 vertices)
 
-Not real ENIGMA or ADNI data. Used for install checks and CI. No QA labels.
+Not real ENIGMA or ADNI data. Used for `qc-report --example` and CI.
+Frozen paper models **reject** these files (they need 930-2502 atlas vertices).
 
 ```
 examples/tiny/
@@ -10,5 +11,3 @@ examples/tiny/
   subjA/... same for ROI 13
   subjB/...
 ```
-
-No meshes: missing curvature would fall back to 2-channel. These folders already have `.raw` files.

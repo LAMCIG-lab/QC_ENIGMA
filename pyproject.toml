@@ -9,18 +9,16 @@ authors = [{ name = "LAMCIG lab" }]
 dependencies = [
   "numpy>=1.20",
   "pandas>=1.3",
-  "scikit-learn>=1.0",
+  "scikit-learn==1.3.2",
   "joblib>=1.2",
 ]
-
-[project.optional-dependencies]
-dev = ["pytest>=7"]
 
 [project.scripts]
 qc-report = "shapeqc.cli:report"
 
-[project.urls]
-Homepage = "https://github.com/LAMCIG-lab/QC_ENIGMA"
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+notebook = ["matplotlib<3.8"]
 
 [build-system]
 requires = ["setuptools>=61"]

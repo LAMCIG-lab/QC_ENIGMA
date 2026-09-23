@@ -15,6 +15,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from shapeqc.interpolate import parse_roi_key, roi_token
 from shapeqc.io import load_channels
 
 _THRESHOLDS_CSV = Path(__file__).resolve().parents[2] / "configs" / "thresholds.csv"
@@ -62,9 +63,9 @@ def models_2ch_dir(explicit: Path | None = None) -> Path:
 
 
 def apply_tau_override(
-    taus: dict[tuple[str, int, int], float],
+    taus: dict,
     override,
-) -> dict[tuple[str, int, int], float]:
+) -> dict:
     """Replace paper taus. override is None, a float, or {roi: tau} / nested dict."""
     if override is None or override == "":
         return taus
@@ -74,15 +75,15 @@ def apply_tau_override(
         raise SystemExit("TAU must be None, a number, or a dict of roi -> tau")
     out = dict(taus)
     for roi_key, val in override.items():
-        roi = int(roi_key)
+        token = parse_roi_key(roi_key)
         if isinstance(val, dict):
             for ch, tau in val.items():
                 for key in list(out):
-                    if key[0] == str(ch) and key[1] == roi:
+                    if key[0] == str(ch) and key[1] == token:
                         out[key] = float(tau)
         else:
             for key in list(out):
-                if key[1] == roi:
+                if key[1] == token:
                     out[key] = float(val)
     return out
 
@@ -94,7 +95,7 @@ def load_thresholds(path: str | Path | None = None) -> dict[tuple[str, int, int]
     df = pd.read_csv(csv_path)
     out = {}
     for _, r in df.iterrows():
-        out[(str(r["channel_set"]), int(r["roi"]), int(r["seed"]))] = float(r["tau"])
+        out[(str(r["channel_set"]), parse_roi_key(r["roi"]), int(r["seed"]))] = float(r["tau"])
     return out
 
 
@@ -113,12 +114,12 @@ def load_joblib_checksums(path: str | Path | None = None) -> dict[tuple[str, int
     df = pd.read_csv(csv_path)
     out = {}
     for _, r in df.iterrows():
-        out[(str(r["channel_set"]), int(r["roi"]), int(r["seed"]))] = str(r["sha256"]).lower()
+        out[(str(r["channel_set"]), parse_roi_key(r["roi"]), int(r["seed"]))] = str(r["sha256"]).lower()
     return out
 
 
-def verify_joblib(path: Path, *, channel_set: str, roi: int, seed: int, checksums: dict) -> None:
-    key = (str(channel_set), int(roi), int(seed))
+def verify_joblib(path: Path, *, channel_set: str, roi, seed: int, checksums: dict) -> None:
+    key = (str(channel_set), parse_roi_key(roi), int(seed))
     expected = checksums.get(key)
     if not expected:
         return
@@ -127,25 +128,26 @@ def verify_joblib(path: Path, *, channel_set: str, roi: int, seed: int, checksum
         raise SystemExit(
             "SHA256 mismatch for {0} roi={1} seed={2} file {3}. "
             "Expected {4}, got {5}. joblib files are pickle: only load "
-            "trusted paper weights.".format(channel_set, roi, seed, path.name, expected, got)
+            "trusted paper weights.".format(channel_set, roi_token(roi), seed, path.name, expected, got)
         )
 
 
-def find_joblib(roi: int, seed: int, model_dir: Path) -> Path:
-    needle = "_roi{0}_seed{1}_kpca_logistic.joblib".format(int(roi), int(seed))
+def find_joblib(roi, seed: int, model_dir: Path) -> Path:
+    token = roi_token(roi)
+    needle = "_roi{0}_seed{1}_kpca_logistic.joblib".format(token, int(seed))
     hits = sorted(p for p in Path(model_dir).glob("*" + needle) if p.name.endswith(needle))
     if not hits:
-        raise SystemExit("No KPCA joblib for roi={0} seed={1} in {2}".format(roi, seed, model_dir))
+        raise SystemExit("No KPCA joblib for roi={0} seed={1} in {2}".format(token, seed, model_dir))
     if len(hits) > 1:
         raise SystemExit(
             "Multiple KPCA joblibs for roi={0} seed={1} in {2}: {3}".format(
-                roi, seed, model_dir, ", ".join(p.name for p in hits)
+                token, seed, model_dir, ", ".join(p.name for p in hits)
             )
         )
     return hits[0]
 
 
-def find_2ch_joblib(roi: int, seed: int = 42, model_dir: Path | None = None) -> Path:
+def find_2ch_joblib(roi, seed: int = 42, model_dir: Path | None = None) -> Path:
     return find_joblib(roi, seed, models_2ch_dir(model_dir))
 
 
@@ -158,7 +160,7 @@ def _unwrap_pipe(blob):
 def score_frozen(
     manifest: pd.DataFrame,
     *,
-    roi: int,
+    roi,
     features: list[str],
     model_dir: Path,
     seed: int = 42,
@@ -167,6 +169,7 @@ def score_frozen(
     if pipe is None:
         pipe = _unwrap_pipe(joblib.load(find_joblib(roi, seed, model_dir)))
     n_in = int(getattr(pipe, "n_features_in_", 0))
+    token = roi_token(roi)
     scores = []
     for _, row in manifest.iterrows():
         x = load_channels(
@@ -178,8 +181,9 @@ def score_frozen(
         if n_in and int(x.size) != n_in:
             raise SystemExit(
                 "Model for ROI {0} expects {1} features (atlas vertex count), "
-                "got {2} for subject {3}. Frozen paper models only fit real ENIGMA "
-                "meshes, not the tiny example.".format(roi, n_in, x.size, row["subject_id"])
+                "got {2} for subject {3}. Frozen models need real ENIGMA meshes.".format(
+                    token, n_in, x.size, row["subject_id"]
+                )
             )
         scores.append(float(pipe.predict_proba(x.reshape(1, -1))[0, 1]))
     return np.asarray(scores, dtype=np.float64)
@@ -188,7 +192,7 @@ def score_frozen(
 def score_frozen_2ch(
     manifest: pd.DataFrame,
     *,
-    roi: int,
+    roi,
     seed: int = 42,
     model_dir: Path | None = None,
 ) -> np.ndarray:
@@ -204,7 +208,7 @@ def score_frozen_2ch(
 def score_frozen_3ch(
     manifest: pd.DataFrame,
     *,
-    roi: int,
+    roi,
     seed: int = 42,
     model_dir: Path | None = None,
 ) -> np.ndarray:

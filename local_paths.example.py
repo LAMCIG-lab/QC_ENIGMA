@@ -1,24 +1,41 @@
 """Copy this file to local_paths.py and edit. local_paths.py is gitignored.
-Then: chmod 600 local_paths.py && qc-report
+Then: chmod 600 local_paths.py && qc-report --doctor && qc-report
+
+qc-report and notebooks/demo_predict_qc.ipynb read the same knobs.
+Only qc-report writes OUT_DIR (qc_report.md + predictions.csv).
+Laptop smoke test (no paper weights): qc-report --example
 """
 
-# Site folder of subject subfolders, or one subject folder of .raw files.
+# Site folder, ENIGMA_SZ root, or one subject folder of .raw files.
+# The scorer searches for folders that contain thick_*.raw (nested ENIGMA
+# layouts included). Duplicate names keep the shortest path.
 SHAPE_ROOT = "/path/to/Shape_output"
 
-# Where qc_report.md and predictions.csv are written.
 OUT_DIR = "./outputs/qc"
 
 # None = all 14 ENIGMA ROIs. Or a list, e.g. [17, 53].
 ROIS = None
 
-# None = paper taus in configs/thresholds.csv (recall-floor 0.8).
-# float = same tau for every ROI.
-# dict = per-ROI override, e.g. {11: 0.6} (other ROIs keep the paper tau).
-# Nested: {11: {"thick+logjac+curv": 0.6, "thick+logjac": 0.5}}
+# 0 or None = every subject under SHAPE_ROOT. Positive int = cap.
+MAX_SUBJECTS = None
+
+# None = taus in configs/thresholds.csv (recall-floor 0.8).
 TAU = None
 
-# Frozen KPCA folders (or set SHAPEQC_MODEL_3CH / SHAPEQC_MODEL_2CH in the environment).
-# Trusted paper weights only — joblib is pickle. qc-report SHA256-checks seed-42
-# files against configs/joblib_sha256.csv. Do not commit real cluster paths.
-MODEL_3CH = ""
-MODEL_2CH = ""
+# Optional fail-recall -> interpolator tau. None = thresholds.csv.
+DESIRED_RECALL = None
+INTERPOLATOR = "configs/interpolator.csv"
+
+# None = singles only. True = all L/R homolog pairs. Or [(17, 53), (13, 52)].
+PAIRS = None
+
+# If curvature_<roi>.raw is missing but resliced_mesh_<roi>.m exists, write
+# curvature next to the mesh (needs CCBBM). True = generate. If ccbbm is
+# missing, those rows use the 2-channel model instead of failing the site.
+WRITE_CURVATURE = True
+CCBBM = ""  # absolute path to MedialDemonsShared/bin/ccbbm
+
+# Frozen KPCA folders (sklearn 1.3.2 pickles). SHA256-checked against
+# configs/joblib_sha256.csv. Or set SHAPEQC_MODEL_3CH / SHAPEQC_MODEL_2CH.
+MODEL_3CH = "/path/to/curv_full_recall80/training"
+MODEL_2CH = "/path/to/24239/training"

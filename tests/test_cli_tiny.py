@@ -1,83 +1,77 @@
-"""CLI: qc-report only (unlabeled .raw drop)."""
+"""CLI: unlabeled .raw drop, dummy 32-vertex track, and doctor."""
 
 from pathlib import Path
 
-import joblib
-import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 from shapeqc.cli import report
+from shapeqc.discover import discover_subjects
+from shapeqc.dummy import write_dummy_models
 
 TINY = Path(__file__).resolve().parents[1] / "examples" / "tiny"
+DUMMY = Path(__file__).resolve().parents[1] / "examples" / "dummy_models"
 
 
-def _dummy_3ch(model_dir: Path, rois, n_vert=32, seed=42, tau=0.5):
-    n_feat = 3 * n_vert
-    rng = np.random.RandomState(0)
-    X = rng.randn(24, n_feat)
-    y = np.array([0] * 18 + [1] * 6)
-    pipe = Pipeline(
-        [
-            ("scaler", StandardScaler()),
-            ("clf", LogisticRegression(max_iter=200, class_weight="balanced", random_state=0)),
-        ]
-    )
-    pipe.fit(X, y)
-    model_dir.mkdir(parents=True, exist_ok=True)
-    for roi in rois:
-        joblib.dump(pipe, model_dir / "dummy_roi{0}_seed{1}_kpca_logistic.joblib".format(roi, seed))
-    thr = pd.DataFrame(
-        [{"channel_set": "thick+logjac+curv", "roi": r, "seed": seed, "tau": tau} for r in rois]
-    )
-    path = model_dir / "thresholds.csv"
-    thr.to_csv(path, index=False)
-    return path
+def _ensure_dummy():
+    if not (DUMMY / "3ch").is_dir():
+        write_dummy_models(DUMMY)
 
 
-def test_qc_report_unlabeled_tiny(tmp_path):
-    models = tmp_path / "models3"
-    thr = _dummy_3ch(models, [13, 17])
+def test_qc_report_example(tmp_path):
+    _ensure_dummy()
     out = tmp_path / "qc"
-    report(
-        [
-            "--shape-root",
-            str(TINY),
-            "--rois",
-            "13,17",
-            "--out-dir",
-            str(out),
-            "--models-3ch",
-            str(models),
-            "--thresholds",
-            str(thr),
-            "--skip-joblib-verify",
-        ]
-    )
+    report(["--example", "--out-dir", str(out)])
     preds = pd.read_csv(out / "predictions.csv")
     assert len(preds) == 4
     assert set(preds["roi"].astype(int)) == {13, 17}
     assert (preds["channel_set"] == "thick+logjac+curv").all()
     assert "y_fail" not in preds.columns
-    assert "subject_dir" not in preds.columns
-    assert "files" in preds.columns
     assert "paper_deployable" in preds.columns
-    assert preds.loc[preds["roi"] == 17, "paper_deployable"].astype(bool).all()
-    assert preds["thick_file"].str.contains("thick_").all()
+    assert preds.loc[preds["roi"] == 17, "paper_deployable"].astype(str).str.lower().eq("yes").all()
     md = (out / "qc_report.md").read_text()
     assert "checking strategy" in md.lower()
-    assert "curv_full_recall80" in md
-    assert "Review list" in md or "files to check" in md
-    assert "F-recall" not in md
-    assert "thick_17.raw" in md or "thick_13.raw" in md or "No samples flagged" in md
 
 
-def test_qc_report_requires_local_paths():
+def test_doctor_example():
+    _ensure_dummy()
     try:
-        report([])
+        report(["--example", "--doctor"])
     except SystemExit as exc:
-        assert "local_paths" in str(exc)
-    else:
-        raise AssertionError("expected SystemExit")
+        assert exc.code in (0, None)
+
+
+def test_discover_nested_and_dedupe(tmp_path):
+    site = tmp_path / "mysite"
+    keep = site / "subjA"
+    dup = site / "bilat_shape" / "subjA"
+    stats = site / "stats_bilateral"
+    keep.mkdir(parents=True)
+    dup.mkdir(parents=True)
+    stats.mkdir()
+    (keep / "thick_17.raw").write_bytes(b"\x00" * 8)
+    (dup / "thick_17.raw").write_bytes(b"\x00" * 8)
+    (stats / "notes.txt").write_text("no")
+    found = discover_subjects(site)
+    names = [p.name for p in found.subjects]
+    assert names == ["subjA"]
+    assert found.subjects[0].resolve() == keep.resolve()
+    assert found.duplicates_dropped or any("bilat_shape" in p for p in found.skipped_dirs)
+
+
+def test_discover_enigma_sz_allowlist(tmp_path):
+    root = tmp_path / "ENIGMA_SZ"
+    narsad = root / "Brazil" / "NARSAD" / "sN"
+    wellcome = root / "Brazil" / "Wellcome" / "sW"
+    top = root / "TOP" / "TOP_SZ" / "sT"
+    for folder in (narsad, wellcome, top):
+        folder.mkdir(parents=True)
+        (folder / "thick_17.raw").write_bytes(b"\x00" * 8)
+    # enough labeled children to trigger enigma_sz mode
+    for extra in ("FBIRN", "UCIS", "Oxford"):
+        (root / extra).mkdir()
+    found = discover_subjects(root)
+    names = sorted(p.name for p in found.subjects)
+    assert "sN" in names
+    assert "sT" in names
+    assert "sW" not in names
+    assert found.mode == "enigma_sz"

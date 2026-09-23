@@ -1,0 +1,5 @@
+channel_set,roi,seed,tau
+thick+logjac+curv,13,42,0.5
+thick+logjac,13,42,0.5
+thick+logjac+curv,17,42,0.5
+thick+logjac,17,42,0.5

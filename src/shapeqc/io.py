@@ -9,6 +9,26 @@ import numpy as np
 
 DEFAULT_ROIS: tuple[int, ...] = (10, 11, 12, 13, 17, 18, 26, 49, 50, 51, 52, 53, 54, 58)
 
+FEATURES_3CH = ["thick", "logjac", "curv"]
+FEATURES_2CH = ["thick", "logjac"]
+
+ROI_NAMES = {
+    10: "L-Thalamus",
+    11: "L-Caudate",
+    12: "L-Putamen",
+    13: "L-Pallidum",
+    17: "L-Hippocampus",
+    18: "L-Amygdala",
+    26: "L-Accumbens",
+    49: "R-Thalamus",
+    50: "R-Caudate",
+    51: "R-Putamen",
+    52: "R-Pallidum",
+    53: "R-Hippocampus",
+    54: "R-Amygdala",
+    58: "R-Accumbens",
+}
+
 CHANNEL_FILES = {
     "thick": "thick_{roi}.raw",
     "logjac": "LogJacs_{roi}.raw",
@@ -77,50 +97,15 @@ def load_channels(
 
 
 def iter_subjects(shape_root: str | Path, *, max_subjects: int | None = None) -> Iterable[Path]:
-    """Yield subject folders that contain at least one thick_*.raw.
+    """Yield every subject folder under ``shape_root`` that has at least one thick_*.raw.
 
-    Accepts either a site root (subject subfolders) or a single subject folder.
-    Directories without thick_*.raw are rejected, not skipped.
-    Loose files at the site root (README, leftover CSVs) are ignored.
+    Walks nested ENIGMA site layouts (not only immediate children). Duplicate
+    subject names at two depths keep the shortest path. ``max_subjects`` caps
+    how many folders are yielded; None/0 means all of them.
     """
-    root = Path(shape_root)
-    if not root.is_dir():
-        raise FileNotFoundError(root)
+    from shapeqc.discover import iter_discovered
 
-    if is_subject_dir(root):
-        unknown = [p.name for p in _child_dirs(root)]
-        if unknown:
-            raise SystemExit(
-                "Unknown directories inside subject folder {0}: {1}".format(
-                    root, ", ".join(unknown)
-                )
-            )
-        yield root
-        return
-
-    found: list[Path] = []
-    unknown: list[str] = []
-    for child in _child_dirs(root):
-        if is_subject_dir(child):
-            found.append(child)
-        else:
-            unknown.append(child.name)
-    if unknown:
-        raise SystemExit(
-            "Unknown directories under {0} (no thick_*.raw): {1}".format(
-                root, ", ".join(unknown)
-            )
-        )
-    if not found:
-        raise SystemExit(
-            "no subject folders with thick_*.raw under {0}".format(root)
-        )
-    n = 0
-    for child in found:
-        yield child
-        n += 1
-        if max_subjects is not None and n >= int(max_subjects):
-            return
+    yield from iter_discovered(shape_root, max_subjects=max_subjects)
 
 
 def inventory_row(subject_dir: Path, roi: int) -> dict:

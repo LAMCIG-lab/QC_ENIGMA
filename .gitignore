@@ -8,6 +8,9 @@ src/*.egg-info/
 venv/
 outputs/
 *.joblib
+!examples/dummy_models/**/*.joblib
+*.raw
+!examples/tiny/**/*.raw
 # PBS job stdout/stderr (jobname.o12345 / .e12345). Do not use *.o* / *.e* —
 # those also ignore local_paths.example.py and other legitimate files.
 *.o[0-9]*
@@ -15,9 +18,6 @@ outputs/
 *.log
 .DS_Store
 local_paths.py
-# never commit imaging or labels from ENIGMA/ADNI
-*.raw
-!examples/tiny/**/*.raw
 *.raw.mean_raw.tmp
 *.nii
 *.nii.gz
